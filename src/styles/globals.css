@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   XCLSV — design tokens (the single source of truth).
+   Dark-first by default; an opt-in light theme via `.light` on <html>.
+   Color tokens are runtime CSS variables (so they switch per theme),
+   mapped into Tailwind via `@theme inline` so `bg-canvas`, `text-muted`,
+   `bg-accent`, `text-on-accent`, etc. all resolve to the live values.
+   ───────────────────────────────────────────────────────────── */
+@theme inline {
+  /* Surfaces */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+
+  /* Text */
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  /* Lines */
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* Brand accent + the legible text color to sit on top of it */
+  --color-accent: var(--accent);
+  --color-accent-hi: var(--accent-hi);
+  --color-on-accent: var(--on-accent);
+
+  /* Themeable neutral overlays (replace hard-coded white/[x]) + form field */
+  --color-overlay: var(--overlay);
+  --color-overlay-strong: var(--overlay-strong);
+  --color-field: var(--field);
+  --color-track-off: var(--track-off);
+
+  /* Data + semantic (charts/analytics) — kept vivid in both themes */
+  --color-data-amber: var(--data-amber);
+  --color-data-violet: var(--data-violet);
+  --color-data-teal: var(--data-teal);
+  --color-signal-good: var(--signal-good);
+  --color-signal-bad: var(--signal-bad);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* Typography */
+  --font-display: var(--font-space), "Space Grotesk", sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Elevation + glow */
+  --shadow-elev: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 30px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px rgba(230, 180, 80, 0.2), 0 8px 40px rgba(230, 180, 80, 0.18);
+}
+
+/* ── Dark theme (default) — the warm glow of analog gear on cool charcoal ── */
+:root {
+  color-scheme: dark;
+
+  --canvas: #0a0b0d;
+  --surface: #111317;
+  --elevated: #16181d;
+
+  --foreground: #f5f4f2;
+  --muted: #9a968f;
+  --faint: #6b6863;
+
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.12);
+
+  --accent: #e6b450;
+  --accent-hi: #f3c969;
+  --on-accent: #0a0b0d;
+
+  /* Adaptive player tint (space-separated for modern rgb()). The listening
+     room overrides this per-artwork; this is the brand-amber fallback. */
+  --rp-rgb: 230 180 80;
+
+  --overlay: rgba(255, 255, 255, 0.05);
+  --overlay-strong: rgba(255, 255, 255, 0.09);
+  --field: rgba(255, 255, 255, 0.04);
+  --track-off: rgba(255, 255, 255, 0.2);
+
+  --data-amber: #e6b450;
+  --data-violet: #8b8cf0;
+  --data-teal: #57c9c6;
+  --signal-good: #57c97e;
+  --signal-bad: #e87b6e;
+
+  --glass-1: rgba(255, 255, 255, 0.05);
+  --glass-2: rgba(255, 255, 255, 0.02);
+  --glow-top: rgba(230, 180, 80, 0.06);
+  --scrollbar: rgba(255, 255, 255, 0.08);
+  --scrollbar-hover: rgba(255, 255, 255, 0.14);
+}
+
+/* ── Light theme — warm paper, deepened amber for legibility (still XCLSV) ── */
+html.light {
+  color-scheme: light;
+
+  /* Cool, soft, frosted — panels float over a faint ambient wash. */
+  --canvas: #e8eaee;
+  --surface: #f4f5f7;
+  --elevated: #ffffff;
+
+  --foreground: #1c1f24;
+  --muted: #5d646e;
+  --faint: #9aa0aa;
+
+  --line: rgba(15, 20, 30, 0.08);
+  --line-strong: rgba(15, 20, 30, 0.14);
+
+  --accent: #9a6a15;
+  --accent-hi: #845a10;
+  --on-accent: #fffaf0;
+
+  --overlay: rgba(15, 20, 30, 0.04);
+  --overlay-strong: rgba(15, 20, 30, 0.07);
+  --field: rgba(255, 255, 255, 0.7);
+  --track-off: rgba(15, 20, 30, 0.18);
+
+  --data-amber: #b07d27;
+  --data-violet: #6466d6;
+  --data-teal: #2f9a97;
+  --signal-good: #2f9e57;
+  --signal-bad: #cf5d4f;
+
+  /* Heavier frosted glass for the Apple/Nothing feel. */
+  --glass-1: rgba(255, 255, 255, 0.66);
+  --glass-2: rgba(255, 255, 255, 0.42);
+  --glow-top: rgba(150, 170, 200, 0.18);
+  --scrollbar: rgba(0, 0, 0, 0.12);
+  --scrollbar-hover: rgba(0, 0, 0, 0.22);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  body {
+    /* faint amber halo bleeding from the top — the room lit by the gear */
+    background:
+      radial-gradient(1200px 600px at 50% -10%, var(--glow-top), transparent 60%),
+      var(--canvas);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Tabular mono figures wherever numbers must align. */
+  .tnum {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+    color: var(--foreground);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-hover);
+    background-clip: padding-box;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* The recurring glass panel material — themed for both modes. */
+.glass {
+  background: linear-gradient(180deg, var(--glass-1), var(--glass-2));
+  border: 1px solid var(--line);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* The signature motif animation (see components/ui/eq-bars.tsx). */
+@keyframes eq {
+  0%,
+  100% {
+    height: 25%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

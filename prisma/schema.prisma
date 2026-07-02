@@ -1,0 +1,428 @@
+// XCLSV — Prisma schema
+// Source of truth for the database. Prisma owns migrations.
+// Security-sensitive reads (audio access, fan-scoped data) are ADDITIONALLY
+// guarded by Supabase Row Level Security. Prisma uses the direct connection
+// and can bypass RLS, so any runtime read that serves private audio to a fan
+// must go through the Supabase client (RLS-enforced), not Prisma. See notes
+// at the bottom of this file.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (PgBouncer) for app runtime
+  directUrl = env("DIRECT_URL")   // direct connection, used for migrations
+}
+
+// ──────────────────────────────────────────────────────────────
+// IDENTITY
+// One account can be BOTH an artist and a fan, so role is not exclusive.
+// Profiles are optional 1:1 extensions of User. User maps to a Clerk identity.
+// Onboarding is driven by INTENT, not identity: the chosen intent decides
+// which profiles get provisioned, and either can be added later from Settings.
+// ──────────────────────────────────────────────────────────────
+
+enum AccountIntent {
+  RELEASE  // here to release music  → ArtistProfile
+  DISCOVER // here to discover music → FanProfile
+  BOTH     // both                   → ArtistProfile + FanProfile
+}
+
+model User {
+  id          String         @id @default(cuid())
+  clerkId     String         @unique // maps to the Clerk user id
+  email       String         @unique
+  displayName String
+  username    String?        @unique // universal handle for identity + @mentions; claimed at onboarding. ArtistProfile.handle defaults from this.
+  avatarUrl   String?
+  genres      String[]       @default([]) // favorite (fan) / affiliated (artist) genres, chosen at onboarding
+  socials     Json? // optional public links: { instagram, spotify, tiktok, youtube, x, website }
+  intent      AccountIntent? // chosen during onboarding; kept for analytics
+  notificationPrefs Json? // notification category + channel opt-ins captured at onboarding
+  onboardingDraft   Json? // partial wizard state so a refresh mid-onboarding resumes; cleared on completion
+  onboardedAt DateTime? // null until onboarding completes; gates the app
+  termsAcceptedAt DateTime? // convenience mirror of the LATEST AgreementAcceptance; the versioned rows are the source of truth
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  artist ArtistProfile?
+  fan    FanProfile?
+
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  agreements    AgreementAcceptance[]
+
+  @@index([clerkId])
+}
+
+model ArtistProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handle    String   @unique // @artistname
+  bio       String?
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  songs       Song[]
+  groups      FanGroup[]
+  invitations Invitation[]
+  listeners   RoomAccess[]
+}
+
+model FanProfile {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listenStreak Int       @default(0)
+  lastListenAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  rooms       RoomAccess[]
+  memberships GroupMembership[]
+  sessions    ListeningSession[]
+  comments    Comment[]
+  ratings     Rating[]
+  badges      FanBadge[]
+  invitations Invitation[]
+}
+
+// A listener's standing access to one artist's private room. XCLSV is
+// invite-only: rows are ONLY created by invitation redemption, and the fan's
+// entire experience is the union of their unrevoked rooms — there is no
+// public discovery. Revocation (artist removes access) soft-deletes via
+// `revokedAt` so listening history stays attributable.
+model RoomAccess {
+  id           String        @id @default(cuid())
+  fanId        String
+  fan          FanProfile    @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  artistId     String
+  artist       ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  invitationId String? // loose id of the invitation that opened the room
+  grantedAt    DateTime      @default(now())
+  revokedAt    DateTime? // set when the artist removes access; null = active
+
+  @@unique([fanId, artistId])
+  @@index([artistId])
+}
+
+// One row per user per agreement version. The listener gate checks for the
+// CURRENT version (src/lib/agreement.ts); publishing a new version therefore
+// forces every listener to re-accept before hearing anything.
+model AgreementAcceptance {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version    String // e.g. "2026-07-01"
+  ipAddress  String? // captured where legally appropriate
+  acceptedAt DateTime @default(now())
+
+  @@unique([userId, version])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────
+// CATALOG
+// A Song can carry multiple versions (A/B testing, remixes, radio edits).
+// Exactly one version is primary. Audio + ALL listening events attach to a
+// SongVersion so future version-comparison works without migrating events.
+// ──────────────────────────────────────────────────────────────
+
+enum SongStatus {
+  DRAFT
+  PRIVATE   // released to invited groups on XCLSV
+  SCHEDULED
+  ARCHIVED
+  PUBLISHED // gone public on DSPs; kept for historical analytics
+}
+
+model Song {
+  id          String        @id @default(cuid())
+  artistId    String
+  artist      ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  title       String
+  genre       String?
+  artworkPath String? // Supabase Storage path
+  status      SongStatus    @default(DRAFT)
+  releaseDate DateTime? // scheduled public release date
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  versions   SongVersion[]
+  access     SongAccess[]
+  comments   Comment[]
+  ratings    Rating[]
+  confidence ReleaseConfidence[]
+
+  @@index([artistId, status])
+}
+
+model SongVersion {
+  id         String   @id @default(cuid())
+  songId     String
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  label      String   @default("v1") // "Original", "Radio edit", "No-autotune"...
+  audioPath  String // Supabase Storage path in a PRIVATE bucket
+  durationMs Int
+  isPrimary  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  sessions ListeningSession[]
+  events   PlaybackEvent[]
+
+  @@index([songId])
+}
+
+// ──────────────────────────────────────────────────────────────
+// ACCESS CONTROL — who is allowed to hear what
+// Access is granted to a whole group OR to an individual fan.
+// These tables are what RLS checks before the DB will serve audio.
+// ──────────────────────────────────────────────────────────────
+
+enum GroupType {
+  VIP
+  SPONSORS
+  FRIENDS
+  MANAGEMENT
+  LABEL
+  TOP_FANS
+  CUSTOM
+}
+
+model FanGroup {
+  id        String        @id @default(cuid())
+  artistId  String
+  artist    ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  name      String
+  type      GroupType     @default(CUSTOM)
+  createdAt DateTime      @default(now())
+
+  members GroupMembership[]
+  access  SongAccess[]
+
+  @@index([artistId])
+}
+
+model GroupMembership {
+  id        String     @id @default(cuid())
+  groupId   String
+  group     FanGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fanId     String
+  fan       FanProfile @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@unique([groupId, fanId])
+  @@index([fanId])
+}
+
+model SongAccess {
+  id        String    @id @default(cuid())
+  songId    String
+  song      Song      @relation(fields: [songId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     FanGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fanId     String? // individual grant; left as a loose id so a fan can be granted access before they sign up
+  grantedAt DateTime  @default(now())
+
+  @@index([songId])
+  @@index([groupId])
+}
+
+model Invitation {
+  id         String        @id @default(cuid())
+  artistId   String
+  artist     ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  email      String
+  token      String        @unique
+  groupId    String?
+  fanId      String?
+  fan        FanProfile?   @relation(fields: [fanId], references: [id])
+  acceptedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime      @default(now())
+
+  @@index([artistId])
+  @@index([email])
+}
+
+// ──────────────────────────────────────────────────────────────
+// THE ANALYTICS CORE (the moat)
+// A ListeningSession = one continuous listen of one version by one fan.
+// PlaybackEvents are the RAW signal. Heatmaps, skip points, retention curves,
+// replay rate, and the confidence score are all DERIVED from these events in
+// queries / materialized views — never stored as the source of truth.
+// ──────────────────────────────────────────────────────────────
+
+// FORENSIC-READY: a session row is the unique playback-session record that
+// future audio watermarking keys on — `id` (session), `fanId` (user),
+// `versionId` (song), `deviceId`, `startedAt` are all captured per stream, so
+// a leaked file can be traced to one session without a schema change.
+model ListeningSession {
+  id            String      @id @default(cuid())
+  versionId     String
+  version       SongVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  fanId         String
+  fan           FanProfile  @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  startedAt     DateTime    @default(now())
+  endedAt       DateTime?
+  maxPositionMs Int         @default(0) // furthest playhead position reached
+  completed     Boolean     @default(false) // crossed the completion threshold
+  device        String? // human-readable UA summary
+  deviceId      String? // stable per-device identifier (watermark correlation)
+
+  events PlaybackEvent[]
+
+  @@index([versionId, startedAt])
+  @@index([fanId])
+}
+
+enum PlaybackEventType {
+  PLAY
+  PAUSE
+  SEEK
+  SKIP
+  COMPLETE
+  REPLAY_SEGMENT
+}
+
+model PlaybackEvent {
+  id           String            @id @default(cuid())
+  sessionId    String
+  session      ListeningSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  versionId    String // denormalized for fast per-version rollups without a join
+  version      SongVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  type         PlaybackEventType
+  positionMs   Int // playhead position when the event fired
+  toPositionMs Int? // destination position, for SEEK
+  createdAt    DateTime          @default(now())
+
+  @@index([versionId, type])
+  @@index([sessionId])
+  @@index([versionId, positionMs]) // powers heatmap + skip-point bucketing
+}
+
+// ──────────────────────────────────────────────────────────────
+// FEEDBACK
+// ──────────────────────────────────────────────────────────────
+
+model Rating {
+  id          String     @id @default(cuid())
+  songId      String
+  song        Song       @relation(fields: [songId], references: [id], onDelete: Cascade)
+  fanId       String
+  fan         FanProfile @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  overall     Int // 1–10
+  energy      Int?
+  replayValue Int?
+  mood        Int?
+  lyrics      Int?
+  production  Int?
+  createdAt   DateTime   @default(now())
+
+  @@unique([songId, fanId]) // one rating per fan per song; update in place
+  @@index([songId])
+}
+
+model Comment {
+  id          String     @id @default(cuid())
+  songId      String
+  song        Song       @relation(fields: [songId], references: [id], onDelete: Cascade)
+  fanId       String
+  fan         FanProfile @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  body        String?
+  timestampMs Int? // null = general comment; set = timestamped feedback
+  voicePath   String? // future: voice-note feedback (Supabase Storage)
+  createdAt   DateTime   @default(now())
+
+  @@index([songId, timestampMs])
+}
+
+// ──────────────────────────────────────────────────────────────
+// ENGAGEMENT — notifications, gamification, audit trail
+// ──────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  NEW_FEEDBACK
+  NEW_LISTENER
+  MILESTONE
+  NEW_SONG
+  ARTIST_REPLY
+  RELEASE_COUNTDOWN
+  PUBLIC_RELEASE
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  payload   Json // type-specific data, rendered client-side
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Badge {
+  id          String  @id @default(cuid())
+  key         String  @unique // "first_listen", "streak_7", "early_supporter"...
+  name        String
+  description String
+  iconUrl     String?
+
+  awarded FanBadge[]
+}
+
+model FanBadge {
+  id        String     @id @default(cuid())
+  fanId     String
+  fan       FanProfile @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  badgeId   String
+  badge     Badge      @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  awardedAt DateTime   @default(now())
+
+  @@unique([fanId, badgeId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String // "song.uploaded", "fan.invited", "feedback.left"...
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ──────────────────────────────────────────────────────────────
+// AI — modular placeholder, REAL data shape
+// ReleaseConfidence is a point-in-time snapshot so confidence can be charted
+// across the testing window. The model behind `score` is swappable; the
+// schema is not throwaway. `signals` is the contract for the future model.
+// ──────────────────────────────────────────────────────────────
+
+model ReleaseConfidence {
+  id         String   @id @default(cuid())
+  songId     String
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  score      Int // 0–100
+  summary    String // human-readable verdict shown to the artist
+  signals    Json // { completion, replay, rating, sentiment, engagement }
+  computedAt DateTime @default(now())
+
+  @@index([songId, computedAt])
+}
+
+// ──────────────────────────────────────────────────────────────
+// SECURITY NOTES (implementation, not schema)
+// 1. Audio lives in a PRIVATE Supabase Storage bucket. The client never gets
+//    a raw path — it gets a short-TTL signed URL minted by an API route only
+//    after access is verified against SongAccess / GroupMembership.
+// 2. Enable RLS on every table a fan can read. Resolve the Clerk identity into
+//    a Supabase JWT so RLS policies can reference auth.uid().
+// 3. Prisma (direct connection) is for migrations + trusted server-side writes.
+//    Fan-facing reads of private content go through the RLS-enforced client.
+// ──────────────────────────────────────────────────────────────
