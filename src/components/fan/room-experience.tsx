@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, MotionConfig } from "framer-motion";
 import { useGlobalPlayer } from "@/components/player/player-context";
 import { Waveform } from "@/components/player/waveform";
 import { EqBars } from "@/components/ui/eq-bars";
@@ -64,7 +64,6 @@ export function RoomExperience({
   listenerName: string;
 }) {
   const gp = useGlobalPlayer();
-  const reduce = useReducedMotion();
   const { artist, tracks, upcoming, stats } = data;
 
   // The track that owns the page: whatever is playing from this room,
@@ -86,26 +85,30 @@ export function RoomExperience({
   };
 
   const firstName = listenerName.trim().split(/\s+/)[0] || listenerName;
+  // NOTE: never branch these values on useReducedMotion() — it is null on the
+  // server and set on the client, which desyncs SSR HTML from hydration. The
+  // <MotionConfig reducedMotion="user"> wrapper disables movement instead.
   const rise = (delay: number) => ({
-    initial: { opacity: 0, y: reduce ? 0 : 18 },
+    initial: { opacity: 0, y: 18 },
     animate: { opacity: 1, y: 0 },
     transition: { duration: 0.6, delay, ease: EASE },
   });
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="relative">
       {/* Living background — slow drifting light in the track's color. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <motion.div
           className="absolute left-[8%] top-[-12%] h-[34rem] w-[34rem] rounded-full blur-[130px]"
           style={{ background: "rgb(var(--rp-rgb) / 0.16)" }}
-          animate={reduce ? undefined : { x: [0, 70, -30, 0], y: [0, 40, 15, 0] }}
+          animate={{ x: [0, 70, -30, 0], y: [0, 40, 15, 0] }}
           transition={{ duration: 36, repeat: Infinity, ease: "easeInOut" }}
         />
         <motion.div
           className="absolute right-[2%] top-[22%] h-[26rem] w-[26rem] rounded-full blur-[120px]"
           style={{ background: "rgb(var(--rp-rgb) / 0.10)" }}
-          animate={reduce ? undefined : { x: [0, -60, 25, 0], y: [0, -30, 45, 0] }}
+          animate={{ x: [0, -60, 25, 0], y: [0, -30, 45, 0] }}
           transition={{ duration: 44, repeat: Infinity, ease: "easeInOut" }}
         />
       </div>
@@ -162,9 +165,9 @@ export function RoomExperience({
           >
             <motion.div
               animate={
-                reduce || isCurrentPlaying || !gp.ready
-                  ? { scaleY: 1, opacity: 1 }
-                  : { scaleY: [1, 1.06, 1], opacity: [0.85, 1, 0.85] }
+                isCurrentPlaying || !gp.ready
+                  ? { scaleY: 1 }
+                  : { scaleY: [1, 1.06, 1] }
               }
               transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
               style={{ transformOrigin: "center" }}
@@ -307,6 +310,7 @@ export function RoomExperience({
         ) : null}
       </div>
     </div>
+    </MotionConfig>
   );
 }
 
