@@ -25,6 +25,10 @@ interface GlobalPlayerContext {
   peaks: number[];
   heat: number[];
   ready: boolean;
+  /** Adaptive tint as "r, g, b" — mirrors into the `--rp-rgb` CSS variable so
+   * the whole shell (ambient light, transport, accents) follows the music. */
+  tintRgb: string;
+  setTint: (rgb: string) => void;
   play: (track?: Track) => void;
   pause: () => void;
   toggle: () => void;
@@ -71,6 +75,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [heat, setHeat] = useState<number[]>([]);
   const [src, setSrc] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [tintRgb, setTint] = useState("230, 180, 80");
+
+  // One place mirrors the tint into CSS so every `rgb(var(--rp-rgb))` in the
+  // shell re-lights with the currently playing artwork's color.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--rp-rgb", tintRgb);
+    return () => {
+      document.documentElement.style.removeProperty("--rp-rgb");
+    };
+  }, [tintRgb]);
 
   useEffect(() => {
     try {
@@ -133,6 +147,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         peaks,
         heat,
         ready,
+        tintRgb,
+        setTint,
         play,
         pause,
         toggle,

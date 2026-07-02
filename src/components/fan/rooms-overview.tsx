@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ChevronRight, VerifiedIcon } from "@/components/shell/icons";
-import { gradientFor } from "./artist-dashboard";
+import { gradientFor } from "./artwork";
 import type { RoomSummary } from "@/server/rooms";
 
 /**

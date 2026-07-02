@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import type { DashboardData } from "@/components/fan/artist-dashboard";
+import type { RoomData } from "@/components/fan/room-experience";
 
 /**
  * Fan-side reads, always scoped to the listener's unrevoked RoomAccess rows.
@@ -71,7 +71,7 @@ export async function hasRoomAccess(
 export async function loadRoom(
   artistId: string,
   fanId: string,
-): Promise<DashboardData> {
+): Promise<RoomData> {
   const [artist, songs, upcoming, listens, comments, ratings] =
     await Promise.all([
       db.artistProfile.findUniqueOrThrow({

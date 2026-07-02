@@ -93,7 +93,7 @@ export function GlobalPlayerBar() {
             <Waveform
               peaks={gp.peaks}
               heat={gp.heat}
-              primaryRgb="230, 180, 80"
+              primaryRgb={gp.tintRgb}
               getProgress={gp.getProgress}
               durationMs={gp.durationMs}
               onSeek={gp.seekFraction}

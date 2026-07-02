@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { hasAcceptedCurrentAgreement } from "@/server/agreement";
 import { loadRoom } from "@/server/rooms";
 import { AppShell } from "@/components/shell/app-shell";
-import { ArtistDashboard } from "@/components/fan/artist-dashboard";
+import { RoomExperience } from "@/components/fan/room-experience";
 import { ChevronLeft } from "@/components/shell/icons";
 
 /**
@@ -45,7 +45,7 @@ export default async function RoomPage({
           </Link>
         </div>
       ) : null}
-      <ArtistDashboard data={data} listenerName={user.displayName} />
+      <RoomExperience data={data} listenerName={user.displayName} />
     </AppShell>
   );
 }

@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { hasAcceptedCurrentAgreement } from "@/server/agreement";
 import { listRooms, loadRoom } from "@/server/rooms";
 import { AppShell } from "@/components/shell/app-shell";
-import { ArtistDashboard } from "@/components/fan/artist-dashboard";
+import { RoomExperience } from "@/components/fan/room-experience";
 import { RoomsOverview } from "@/components/fan/rooms-overview";
 import { InviteRequired } from "@/components/fan/invite-required";
 
@@ -39,7 +39,7 @@ export default async function ListenPage() {
     const data = await loadRoom(rooms[0]!.artistId, user.fan.id);
     return (
       <AppShell user={shellUser} accessLabel={`${data.artist.name}’s room`}>
-        <ArtistDashboard data={data} listenerName={user.displayName} />
+        <RoomExperience data={data} listenerName={user.displayName} />
       </AppShell>
     );
   }

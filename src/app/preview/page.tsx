@@ -22,12 +22,12 @@ const SCREENS = [
   },
   {
     href: "/preview/dashboard",
-    title: "Listener dashboard — one room",
-    body: "A single artist's room: stats, shared tracks, and upcoming releases. Nothing else.",
+    title: "The listening room",
+    body: "The release owns the page: breathing waveform hero, adaptive lighting, the catalog kept quiet underneath.",
   },
   {
     href: "/preview/rooms",
-    title: "Listener dashboard — several rooms",
+    title: "Several rooms",
     body: "The same listener after a second artist invites them: only invited artists, ever.",
   },
   {

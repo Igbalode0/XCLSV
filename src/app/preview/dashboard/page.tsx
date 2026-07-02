@@ -1,15 +1,15 @@
 import { AppShell } from "@/components/shell/app-shell";
 import {
-  ArtistDashboard,
-  type DashboardData,
-} from "@/components/fan/artist-dashboard";
+  RoomExperience,
+  type RoomData,
+} from "@/components/fan/room-experience";
 
-/** DEV PREVIEW — the fan dashboard with mock data (see ../page.tsx). */
+/** DEV PREVIEW — the private listening room with mock data (see ../page.tsx). */
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 const daysAhead = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
 
-const MOCK: DashboardData = {
+const MOCK: RoomData = {
   artist: {
     name: "Kenzo",
     handle: "kenzo",
@@ -30,10 +30,10 @@ const MOCK: DashboardData = {
   ],
 };
 
-export default function PreviewDashboard() {
+export default function PreviewRoom() {
   return (
     <AppShell user={{ displayName: "Avery", avatarUrl: null }} accessLabel="Kenzo’s room">
-      <ArtistDashboard data={MOCK} listenerName="Avery" />
+      <RoomExperience data={MOCK} listenerName="Avery" />
     </AppShell>
   );
 }

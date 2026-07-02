@@ -108,7 +108,8 @@ src/
     studio/        artist home (Phase 4 first cut)
     layout.tsx     ClerkProvider + fonts + tokens
   components/  ui/ · brand/ · auth/ · shell/ (sidebar, topbar, player bar)
-               player/ · fan/ (artist-dashboard, rooms-overview, invite-required)
+               player/ · fan/ (room-experience, rooms-overview, invite-required,
+               artwork.ts — deterministic gradients + tints until real art)
   lib/         db · auth · events · utils · clerk-appearance · supabase/ · audio/
                color/ · agreement.ts (AGREEMENT_VERSION + copy)
   server/      session.ts (getSessionContext, homePathFor)
@@ -137,9 +138,14 @@ JWT template named `supabase`; enable Google + Apple providers in Clerk.
 2. Authentication — ✅ themed Clerk, split-screen shell, route protection, `/continue` gate
 3. Onboarding — ✅ intent wizard (resumable draft, live handle check)
 3.5. Invited Access — ✅ invite landing, one-shot redemption at `/continue`,
-   multi-room listener dashboard (`/listen` + `/listen/[artistId]`), mandatory
+   multi-room listener home (`/listen` + `/listen/[artistId]`), mandatory
    versioned Exclusive Listening Agreement gate (`/agreement`), watermark-ready
    `ListeningSession` (Discover feed deleted)
+3.75. The Room — ✅ the fan view is a listening EXPERIENCE, not a dashboard:
+   the current track owns the page, the waveform hero breathes idle / lives on
+   play, and the player's shared tint (`setTint` → `--rp-rgb`) re-lights the
+   whole shell from the track's palette. No stat cards on the fan side — keep
+   it that way. Hero + bottom bar drive ONE engine (player-context).
 4. **Artist Dashboard — ⬅ RESUME HERE** (identity shell exists; needs invitation
    management: create/send invite links, see invited supporters)
 5. Song Upload
